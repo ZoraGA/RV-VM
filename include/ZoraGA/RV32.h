@@ -68,9 +68,9 @@ class rv32
     
     private:
         void run();
-        bool mem_isRange(rv32_mem_info &info, uint32_t addr);
-        bool inst_fetch(uint32_t addr, uint32_t &out, bool &is_compress);
-        bool inst_exec(uint32_t inst);
+        // bool mem_isRange(rv32_mem_info &info, uint32_t addr);
+        bool inst_fetch(uint32_t addr, rv32_inst_fmt &out, bool &is_compress);
+        bool inst_exec(rv32_inst_fmt inst);
 
     private:
         rv32_regs_base m_regs;

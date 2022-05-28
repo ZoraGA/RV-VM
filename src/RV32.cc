@@ -122,7 +122,7 @@ bool rv32::stop()
 void rv32::run()
 {
     uint32_t pc_prv = 0;
-    uint32_t inst;
+    rv32_inst_fmt inst;
     rv_err err;
     rv32_mem_info mem_info;
     bool is_compress = false;
@@ -138,13 +138,14 @@ void rv32::run()
         }
         pc_prv = m_regs.pc;
 
+        m_regs.pc_changed = false;
         if (!inst_exec(inst))
         {
             printf("inst exec error\n");
             break;
         }
 
-        if (m_regs.pc != pc_prv) {
+        if (m_regs.pc != pc_prv || m_regs.pc_changed) {
             printf("pc changed\n");
         } else {
             m_regs.pc += is_compress ? 2 : 4;
@@ -153,7 +154,7 @@ void rv32::run()
     m_running = false;
 }
 
-bool rv32::inst_fetch(uint32_t addr, uint32_t &out, bool &is_compress)
+bool rv32::inst_fetch(uint32_t addr, rv32_inst_fmt &out, bool &is_compress)
 {
     bool ret = false;
     bool found = false;
@@ -167,7 +168,8 @@ bool rv32::inst_fetch(uint32_t addr, uint32_t &out, bool &is_compress)
     do{
         /* find mem for fetch */
         for (auto it:m_mems) {
-            if (mem_isRange(it, addr)) {
+            if (rv32_mem_range(addr, it))
+            {
                 info = it;
                 found = true;
                 break;
@@ -199,7 +201,7 @@ bool rv32::inst_fetch(uint32_t addr, uint32_t &out, bool &is_compress)
                 break;
             }
             is_compress = false;
-            out         = inst.u32;
+            out.inst    = inst.u32;
             ret         = true;
         } else {
             err = info.mem->read(addr, inst.u8, 4);
@@ -208,14 +210,25 @@ bool rv32::inst_fetch(uint32_t addr, uint32_t &out, bool &is_compress)
                 break;
             }
             ret = true;
-            out = inst.u32;
+            out.inst = inst.u32;
         }
     }while(0);
     return ret;
 }
 
-bool rv32::inst_exec(uint32_t inst)
+bool rv32::inst_exec(rv32_inst_fmt inst)
 {
+    rv_err err;
+    bool ret = false;
+    do{
+        for (auto it:m_insts) {
+            if (!it.second->isValid(inst)) continue;
+            err = it.second->exec(inst, m_regs, m_mems);
+            ret = (err == RV_EOK);
+            break;
+        }
+    }while(0);
+    return ret;
 }
 
 }
