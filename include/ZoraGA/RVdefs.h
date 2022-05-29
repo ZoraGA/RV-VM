@@ -26,6 +26,7 @@ typedef enum rv_err
     RV_EIALIGN,     // Instruction alignment error
     RV_EDALIGN,     // Data alignment error
     RV_EUNDEF,      // Undefined instruction
+    RV_EININST,       // Invalid instruction
     RV_EFAULT,
 }rv_err;
 
@@ -159,6 +160,9 @@ rv_err mem_write(T addr, void *p, T len, TI &info) {
 
 #define rv32_mem_read(addr, p, len, infos) mem_read<uint32_t, rv32_mem_info, rv32_mem_infos>(addr, p, len, infos)
 #define rv64_mem_read(addr, p, len, infos) mem_read<uint64_t, rv64_mem_info, rv64_mem_infos>(addr, p, len, infos)
+
+#define rv32_mem_write(addr, p, len, infos) mem_write<uint32_t, rv32_mem_info, rv32_mem_infos>(addr, p, len, infos)
+#define rv64_mem_write(addr, p, len, infos) mem_write<uint64_t, rv64_mem_info, rv64_mem_infos>(addr, p, len, infos)
 
 /**
  * @brief Cache interface template
