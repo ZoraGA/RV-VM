@@ -10,7 +10,7 @@ class RV32I:public rv32_insts
 {
     public:
         rv_err isValid(rv32_inst_fmt inst);
-        rv_err exec(rv32_inst_fmt inst,  rv32_regs_base &regs, rv32_mem_infos &mem_infos);
+        rv_err exec(rv32_inst_fmt inst,  rv32_regs_base &regs, rv32_mem_infos &mem_infos, rv32_ctrl &ctrl);
 
     private:
         typedef struct inst_arg
@@ -18,6 +18,7 @@ class RV32I:public rv32_insts
             rv32_inst_fmt inst;
             rv32_regs_base *regs;
             rv32_mem_infos *mems;
+            rv32_ctrl *ctrl;
         }inst_args;
 
         rv_err lb(inst_args args);

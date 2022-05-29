@@ -44,11 +44,24 @@ struct regs
     }
     T x[N];
     T pc;
-    bool pc_changed;
 };
 
 typedef struct regs<uint32_t, 32> rv32_regs_base;
 typedef struct regs<uint64_t, 32> rv64_regs_base;
+
+template<typename T, size_t N>
+struct rvctrl
+{
+    rvctrl() {
+        memset(csrs, 0, sizeof(x));
+        pc_changed = false
+    }
+    T csrs[N];
+    bool pc_changed;
+};
+
+typedef struct rvctrl<uint32_t, 1> rv32_ctrl;
+typedef struct rvctrl<uint64_t, 1> rv64_ctrl;
 
 /**
  * @brief Float register template
@@ -280,8 +293,13 @@ typedef union rv32_inst_fmt
             } S;
 
             struct {
-                uint32_t imm_11: 1;
-                uint32_t imm_4_1: 4;
+                union{
+                    struct {
+                        uint32_t imm_11: 1;
+                		uint32_t imm_4_1: 4;
+                    };
+                    uint32_t offset:5;
+                };
                 uint32_t funct3: 3;
                 uint32_t rs1: 5;
                 uint32_t rs2: 5;
@@ -336,7 +354,7 @@ typedef comprs<uint32_t, uint64_t> rv64_comprs;
  * @tparam RT Base register type, rv32_regs_base or rv64_regs_base
  * @tparam MT Memory vector reference, rv32_mem_infos or rv64_mem_infos
  */
-template<typename T, typename RT, typename MT>
+template<typename T, typename RT, typename MT, typename CT>
 class insts
 {
     public:
@@ -354,16 +372,35 @@ class insts
          * @param inst Instruction data
          * @param regs Register reference
          * @param mems Memory reference
+         * @param ctrl CPU Control
          * @return rv_err 
          */
-        virtual rv_err exec(T inst, RT &regs, MT &mems) = 0;
+        virtual rv_err exec(T inst, RT &regs, MT &mems, CT &ctrl) = 0;
 };
 
-typedef insts<rv32_inst_fmt, rv32_regs_base, rv32_mem_infos> rv32_insts;
-typedef insts<uint64_t, rv64_regs_base, rv64_mem_infos> rv64_insts;
+typedef insts<rv32_inst_fmt, rv32_regs_base, rv32_mem_infos, rv32_ctrl> rv32_insts;
+typedef insts<uint64_t, rv64_regs_base, rv64_mem_infos, rv64_ctrl> rv64_insts;
 
 typedef std::map<std::string, rv32_insts*> rv32_insts_map;
 typedef std::map<std::string, rv64_insts*> rv64_insts_map;
+
+template<typename T, typename S>
+S sext(T v, uint8_t bit)
+{
+    union {
+        T ui;
+        S si;
+    }ret;
+    ret.ui = 0;
+    if (v & (1<<bit)) {
+        ret.ui |= ((~((T)0)) << bit);   
+    }
+    ret.ui |= v;
+    return ret.si;
+}
+
+#define rv32_sext(v, b) sext<uint32_t, int32_t>(v, b)
+#define rv64_sext(v, b) sext<uint64_t, int64_t>(v, b)
 
 }
 

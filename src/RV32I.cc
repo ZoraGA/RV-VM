@@ -8,7 +8,7 @@ rv_err RV32I::isValid(rv32_inst_fmt inst)
     return ( op_aa_match(inst) && op_bbb_match(inst) && op_cc_match(inst) ) ? RV_EOK : RV_EUNDEF;
 }
 
-rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem_infos)
+rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem_infos, rv32_ctrl &ctrl)
 {
     bool ok = false;
     rv_err err = RV_EUNDEF;
@@ -17,6 +17,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem
         args.inst = inst;
         args.regs = &regs;
         args.mems = &mem_infos;
+        args.ctrl = &ctrl;
         if (inst.cc == 0b00) {
             switch(inst.bbb) {
                 /* I type, lb/lh/lw/lbu/lhu */
@@ -277,7 +278,9 @@ rv_err RV32I::fence(inst_args args)
 {}
 
 rv_err RV32I::addi(inst_args args)
-{}
+{
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
+}
 
 rv_err RV32I::slti(inst_args args)
 {}
@@ -292,7 +295,10 @@ rv_err RV32I::ori(inst_args args)
 {}
 
 rv_err RV32I::andi(inst_args args)
-{}
+{
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] & rv32_sext(args.inst.I.imm_11_0, 11);
+    return RV_EOK;
+}
 
 rv_err RV32I::slli(inst_args args)
 {}
@@ -304,7 +310,11 @@ rv_err RV32I::srai(inst_args args)
 {}
 
 rv_err RV32I::auipc(inst_args args)
-{}
+{
+    args.regs->pc += rv32_sext( ((uint32_t)args.inst.U.imm_31_12)<<12, 31 );
+    args.ctrl->pc_changed = true;
+    return RV_EOK;
+}
 
 rv_err RV32I::sb(inst_args args)
 {}
@@ -316,7 +326,10 @@ rv_err RV32I::sw(inst_args args)
 {}
 
 rv_err RV32I::add(inst_args args)
-{}
+{
+    args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] + args.regs->x[args.inst.R.rs2];
+    return RV_EOK;
+}
 
 rv_err RV32I::sub(inst_args args)
 {}
@@ -343,31 +356,80 @@ rv_err RV32I::orr(inst_args args)
 {}
 
 rv_err RV32I::andd(inst_args args)
-{}
+{
+    args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] & args.regs->x[args.inst.R.rs2];
+    return RV_EOK;
+}
 
 rv_err RV32I::lui(inst_args args)
 {}
 
 rv_err RV32I::beq(inst_args args)
-{}
+{
+    if (args.regs->x[args.inst.B.rs1] == args.regs->x[args.inst.B.rs2]) {
+        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.ctrl->pc_changed = true;
+    }
+    return RV_EOK;
+}
 
 rv_err RV32I::bne(inst_args args)
-{}
+{
+    if (args.regs->x[args.inst.B.rs1] != args.regs->x[args.inst.B.rs2]) {
+        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.ctrl->pc_changed = true;
+    }
+    return RV_EOK;
+}
 
 rv_err RV32I::blt(inst_args args)
-{}
+{
+    if ( *((int32_t*)&args.regs->x[args.inst.B.rs1]) < *((int32_t*)&args.regs->x[args.inst.B.rs2]) )
+    {
+        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.ctrl->pc_changed = true;
+    }
+    return RV_EOK;
+}
 
 rv_err RV32I::bge(inst_args args)
-{}
+{
+    if ( *((int32_t*)&args.regs->x[args.inst.B.rs1]) >= *((int32_t*)&args.regs->x[args.inst.B.rs2]) )
+    {
+        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.ctrl->pc_changed = true;
+    }
+    return RV_EOK;
+}
 
 rv_err RV32I::bltu(inst_args args)
-{}
+{
+    if ( args.regs->x[args.inst.B.rs1] < args.regs->x[args.inst.B.rs2] )
+    {
+        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.ctrl->pc_changed = true;
+    }
+    return RV_EOK;
+}
 
 rv_err RV32I::bgeu(inst_args args)
-{}
+{
+    if ( args.regs->x[args.inst.B.rs1] >= args.regs->x[args.inst.B.rs2] )
+    {
+        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.ctrl->pc_changed = true;
+    }
+    return RV_EOK;
+}
 
 rv_err RV32I::jalr(inst_args args)
-{}
+{
+    uint32_t t = args.regs->pc+4;
+    args.regs->pc = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
+    args.regs->x[args.inst.I.rd] = t;
+    args.ctrl->pc_changed = true;
+    return RV_EOK;
+}
 
 rv_err RV32I::ecall(inst_args args)
 {}

@@ -73,6 +73,7 @@ class rv32
         bool inst_exec(rv32_inst_fmt inst);
 
     private:
+    	rv32_ctrl      m_ctrl;
         rv32_regs_base m_regs;
         rv32_insts_map m_insts;
         rv32_mem_infos m_mems;

@@ -138,14 +138,14 @@ void rv32::run()
         }
         pc_prv = m_regs.pc;
 
-        m_regs.pc_changed = false;
+        m_ctrl.pc_changed = false;
         if (!inst_exec(inst))
         {
             printf("inst exec error\n");
             break;
         }
 
-        if (m_regs.pc != pc_prv || m_regs.pc_changed) {
+        if (m_regs.pc != pc_prv || m_ctrl.pc_changed) {
             printf("pc changed\n");
         } else {
             m_regs.pc += is_compress ? 2 : 4;
@@ -223,7 +223,7 @@ bool rv32::inst_exec(rv32_inst_fmt inst)
     do{
         for (auto it:m_insts) {
             if (!it.second->isValid(inst)) continue;
-            err = it.second->exec(inst, m_regs, m_mems);
+            err = it.second->exec(inst, m_regs, m_mems, m_ctrl);
             ret = (err == RV_EOK);
             break;
         }
