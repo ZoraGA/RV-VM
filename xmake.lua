@@ -1,5 +1,6 @@
 target("rvvm")
     set_kind("static")
     set_warnings("all", "error")
+    set_targetdir("dist")
     add_files("src/*.cc")
     add_includedirs("include", {public=true})
