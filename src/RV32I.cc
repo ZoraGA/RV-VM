@@ -137,7 +137,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem
                     } else if (inst.R.funct3 == 0b101) {
                         if (inst.R.funct7 == 0) {
                             err = srl(args);
-                        } else if (inst.R.funct7 = 0b0100000) {
+                        } else if (inst.R.funct7 == 0b0100000) {
                             err = sra(args);
                         } else {
                             // err = RV_EUNDEF;
@@ -165,23 +165,23 @@ rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem
         }
         else if (inst.cc == 0b11) {
             switch(inst.bbb) {
-                /* B type, beq/bne/blt/bge/bltu/bgeu */
-                if (inst.B.funct3 == 0b000) {
-                    err = beq(args);
-                } else if (inst.B.funct3 == 0b001) {
-                    err = bne(args);
-                } else if (inst.B.funct3 == 0b100) {
-                    err = blt(args);
-                } else if (inst.B.funct3 = 0b101) {
-                    err = bge(args);
-                } else if (inst.B.funct3 == 0b110) {
-                    err = bltu(args);
-                } else if (inst.B.funct3 == 0b111) {
-                    err = bgeu(args);
-                } else {
-                    // err = RV_EUNDEF;
-                }
+            	/* B type, beq/bne/blt/bge/bltu/bgeu */
                 case 0b000:
+                	if (inst.B.funct3 == 0b000) {
+                        err = beq(args);
+                    } else if (inst.B.funct3 == 0b001) {
+                        err = bne(args);
+                    } else if (inst.B.funct3 == 0b100) {
+                        err = blt(args);
+                    } else if (inst.B.funct3 == 0b101) {
+                        err = bge(args);
+                    } else if (inst.B.funct3 == 0b110) {
+                        err = bltu(args);
+                    } else if (inst.B.funct3 == 0b111) {
+                        err = bgeu(args);
+                    } else {
+                        // err = RV_EUNDEF;
+                    }
                     break;
 
                 /* I type, jalr */
@@ -331,7 +331,7 @@ rv_err RV32I::addi(inst_args args)
 
 rv_err RV32I::slti(inst_args args)
 {
-    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] < rv32_sext(args.inst.I.imm_11_0, 11) ? 1 : 0;
+    args.regs->x[args.inst.I.rd] = (int64_t)args.regs->x[args.inst.I.rs1] < rv32_sext(args.inst.I.imm_11_0, 11) ? 1 : 0;
     return RV_EOK;
 }
 

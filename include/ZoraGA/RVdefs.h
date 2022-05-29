@@ -54,8 +54,8 @@ template<typename T, size_t N>
 struct rvctrl
 {
     rvctrl() {
-        memset(csrs, 0, sizeof(x));
-        pc_changed = false
+        memset(csrs, 0, sizeof(csrs));
+        pc_changed = false;
     }
     T csrs[N];
     bool pc_changed;

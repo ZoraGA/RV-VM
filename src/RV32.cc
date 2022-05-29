@@ -123,8 +123,6 @@ void rv32::run()
 {
     uint32_t pc_prv = 0;
     rv32_inst_fmt inst;
-    rv_err err;
-    rv32_mem_info mem_info;
     bool is_compress = false;
 
     m_running = true;
