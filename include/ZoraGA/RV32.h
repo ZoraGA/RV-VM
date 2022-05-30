@@ -33,6 +33,15 @@ class rv32
         bool add_mem(uint32_t addr, uint32_t length, rv32_mem *mem);
 
         /**
+         * @brief Set logger
+         * 
+         * @param log 
+         * @return true 
+         * @return false 
+         */
+        bool set_log(rvlog *log);
+
+        /**
          * @brief Set the start addr of PC register
          * 
          * @param addr 
@@ -65,19 +74,40 @@ class rv32
          * @return false 
          */
         bool stop();
+
+        /**
+         * @brief Wait for VM start
+         * 
+         * @param timeout_ms 
+         * @return true 
+         * @return false 
+         */
+        bool wait_for_start(uint32_t timeout_ms = 0);
+
+        /**
+         * @brief Wait for VM stop
+         * 
+         * @param timeout_ms 
+         * @return true 
+         * @return false 
+         */
+        bool wait_for_stop(uint32_t timeout_ms = 0);
     
     private:
         void run();
         // bool mem_isRange(rv32_mem_info &info, uint32_t addr);
         bool inst_fetch(uint32_t addr, rv32_inst_fmt &out, bool &is_compress);
         bool inst_exec(rv32_inst_fmt inst);
+        void regs_dump();
 
     private:
     	rv32_ctrl      m_ctrl;
         rv32_regs_base m_regs;
         rv32_insts_map m_insts;
         rv32_mem_infos m_mems;
+        rv32_event     m_event;
         rv32_comprs   *m_comprs = nullptr;
+        rvlog         *m_log = nullptr;
 
         std::mutex m_mutex;
         std::thread *m_thread = nullptr;
@@ -85,7 +115,6 @@ class rv32
         bool m_running         = false;
         bool m_started         = false;
         bool m_exit_req        = false;
-        bool m_base_inst_added = false;
 };
 
 }

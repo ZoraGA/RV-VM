@@ -11,6 +11,7 @@ class RV32I:public rv32_insts
     public:
         rv_err isValid(rv32_inst_fmt inst);
         rv_err exec(rv32_inst_fmt inst,  rv32_regs_base &regs, rv32_mem_infos &mem_infos, rv32_ctrl &ctrl);
+        rv_err set_log(rvlog *log);
 
     private:
         typedef struct inst_arg
@@ -57,6 +58,7 @@ class RV32I:public rv32_insts
         rv_err bge(inst_args args);
         rv_err bltu(inst_args args);
         rv_err bgeu(inst_args args);
+        rv_err jal(inst_args args);
         rv_err jalr(inst_args args);
         rv_err ecall(inst_args args);
         rv_err ebreak(inst_args args);
@@ -65,6 +67,9 @@ class RV32I:public rv32_insts
         bool op_aa_match(rv32_inst_fmt inst);
         bool op_bbb_match(rv32_inst_fmt inst);
         bool op_cc_match(rv32_inst_fmt inst);
+    
+    private:
+        rvlog *m_log = nullptr;
 };
 
 }

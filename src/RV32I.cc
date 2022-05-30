@@ -1,5 +1,13 @@
 #include "ZoraGA/RV32I.h"
 
+#define LOGI(fmt, ...) if (m_log) m_log->I(fmt, ##__VA_ARGS__)
+#define LOGE(fmt, ...) if (m_log) m_log->E(fmt, ##__VA_ARGS__)
+#define LOGW(fmt, ...) if (m_log) m_log->W(fmt, ##__VA_ARGS__)
+#define LOGD(fmt, ...) if (m_log) m_log->D(fmt, ##__VA_ARGS__)
+#define LOGV(fmt, ...) if (m_log) m_log->V(fmt, ##__VA_ARGS__)
+#define LOGINST(fmt, ...) if (m_log) m_log->inst(fmt, ##__VA_ARGS__)
+#define LOGREGS(fmt, ...) if (m_log) m_log->regs(fmt, ##__VA_ARGS__)
+
 namespace ZoraGA::RVVM::RV32
 {
 
@@ -191,6 +199,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem
 
                 /* No matched */
                 case 0b011:
+                    err = jal(args);
                     break;
 
                 /* I type, ecall/ebreak */
@@ -220,6 +229,12 @@ rv_err RV32I::exec(rv32_inst_fmt inst, rv32_regs_base &regs, rv32_mem_infos &mem
         }
     }while(0);
     return err;
+}
+
+rv_err RV32I::set_log(rvlog *log)
+{
+    m_log = log;
+    return RV_EOK;
 }
 
 bool RV32I::op_aa_match(rv32_inst_fmt inst)
@@ -261,16 +276,18 @@ bool RV32I::op_cc_match(rv32_inst_fmt inst)
 
 rv_err RV32I::lb(inst_args args)
 {
+    LOGINST("lb, rd: %u, rs1: %u, off: 0x%03x", args.inst.I.rd, args.inst.I.rs1, args.inst.I.imm_11_0);
     uint32_t addr = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
     uint8_t dat;
     rv_err err = rv32_mem_read(addr, (void *)&dat, 1, *args.mems);
-    if (!err != RV_EOK) return err;
+    if (err != RV_EOK) return err;
     args.regs->x[args.inst.I.rd] = rv32_sext(dat, 7);
     return RV_EOK;
 }
 
 rv_err RV32I::lh(inst_args args)
 {
+    LOGINST("lh, rd: %u, rs1: %u, off: 0x%03x", args.inst.I.rd, args.inst.I.rs1, args.inst.I.imm_11_0);
     uint32_t addr = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
     union {
         uint8_t u8[2];
@@ -284,6 +301,7 @@ rv_err RV32I::lh(inst_args args)
 
 rv_err RV32I::lw(inst_args args)
 {
+    LOGINST("lw, rd: %u, rs1: %u, off: 0x%03x", args.inst.I.rd, args.inst.I.rs1, args.inst.I.imm_11_0);
     uint32_t addr = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
     union {
         uint8_t u8[4];
@@ -297,6 +315,7 @@ rv_err RV32I::lw(inst_args args)
 
 rv_err RV32I::lbu(inst_args args)
 {
+    LOGINST("lbu, rd: %u, rs1: %u, off: 0x%03x", args.inst.I.rd, args.inst.I.rs1, args.inst.I.imm_11_0);
     uint32_t addr = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
     uint8_t dat;
     rv_err err = rv32_mem_read(addr, (void *)&dat, 1, *args.mems);
@@ -307,6 +326,7 @@ rv_err RV32I::lbu(inst_args args)
 
 rv_err RV32I::lhu(inst_args args)
 {
+    LOGINST("lhu, rd: %u, rs1: %u, off: 0x%03x", args.inst.I.rd, args.inst.I.rs1, args.inst.I.imm_11_0);
 	uint32_t addr = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
     union {
         uint8_t u8[2];
@@ -320,18 +340,36 @@ rv_err RV32I::lhu(inst_args args)
 
 rv_err RV32I::fence(inst_args args)
 {
+    LOGINST("fence");
     return RV_EOK;
 }
 
 rv_err RV32I::addi(inst_args args)
 {
-    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    }dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm_11_0 = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(imm.I.imm, 11);
+    LOGINST("addi, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x = %d", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32, dat.i32);
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] + dat.i32;
 	return RV_EOK;
 }
 
 rv_err RV32I::slti(inst_args args)
 {
-    args.regs->x[args.inst.I.rd] = (int64_t)args.regs->x[args.inst.I.rs1] < rv32_sext(args.inst.I.imm_11_0, 11) ? 1 : 0;
+    union {
+        uint32_t u32;
+        int32_t i32;
+    }dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm_11_0 = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(imm.I.imm, 11);
+
+    LOGINST("slti, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32);
+    args.regs->x[args.inst.I.rd] = (int64_t)args.regs->x[args.inst.I.rs1] < dat.i32 ? 1 : 0;
     return RV_EOK;
 }
 
@@ -340,113 +378,183 @@ rv_err RV32I::sltiu(inst_args args)
     union {
         uint32_t u32;
         int32_t i32;
-    } dat;
-    dat.i32 = rv32_sext(args.inst.I.imm_11_0, 11);
+    }dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm_11_0 = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(imm.I.imm, 11);
+    LOGINST("sltiu, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32);
     args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] < dat.u32 ? 1 : 0;
     return RV_EOK;
 }
 
 rv_err RV32I::xori(inst_args args)
 {
-    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] ^ rv32_sext(args.inst.I.imm_11_0, 11);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    }dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm_11_0 = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(imm.I.imm, 11);
+    LOGINST("xori, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32);
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] ^ dat.i32;
     return RV_EOK;
 }
 
 rv_err RV32I::ori(inst_args args)
 {
-    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] | rv32_sext(args.inst.I.imm_11_0, 11);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    }dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm_11_0 = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(imm.I.imm, 11);
+    LOGINST("ori, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32);
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] | dat.i32;
     return RV_EOK;
 }
 
 rv_err RV32I::andi(inst_args args)
 {
-    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] & rv32_sext(args.inst.I.imm_11_0, 11);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    }dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm_11_0 = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(imm.I.imm, 11);
+    LOGINST("andi, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32);
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] & dat.i32;
     return RV_EOK;
 }
 
 rv_err RV32I::slli(inst_args args)
 {
-    if (args.inst.R.rs2 & 0x10) return RV_EININST;
-    args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] << args.inst.R.rs2;
+    if (args.inst.I.shamt & 0x10) return RV_EININST;
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] << args.inst.I.shamt;
     return RV_EOK;
 }
 
 rv_err RV32I::srli(inst_args args)
 {
-    if (args.inst.R.rs2 & 0x10) return RV_EININST;
-    args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] >> args.inst.R.rs2;
+    LOGINST("srli, rd: %u, rs1: %u, shamt: %u", args.inst.I.rd, args.inst.I.rs1, args.inst.I.shamt);
+    if (args.inst.I.shamt & 0x10) return RV_EININST;
+    args.regs->x[args.inst.I.rd] = args.regs->x[args.inst.I.rs1] >> args.inst.I.shamt;
     return RV_EOK;
 }
 
 rv_err RV32I::srai(inst_args args)
 {
-    if (args.inst.R.rs2 & 0x10) return RV_EININST;
+    LOGINST("srai, rd: %u, rs1: %u, shamt: %u", args.inst.I.rd, args.inst.I.rs1, args.inst.I.shamt);
+    if (args.inst.I.shamt & 0x10) return RV_EININST;
     union {
         uint32_t u32;
         uint32_t i32;
     } dat;
-    dat.u32 = args.regs->x[args.inst.R.rs1] >> args.inst.R.rs2;
-    dat.i32 = rv32_sext(dat.u32, 31 - args.inst.R.rs2);
-    args.regs->x[args.inst.R.rd] = dat.u32;
+    dat.u32 = args.regs->x[args.inst.I.rs1] >> args.inst.I.shamt;
+    dat.i32 = rv32_sext(dat.u32, 31 - args.inst.I.shamt);
+    args.regs->x[args.inst.I.rd] = dat.u32;
     return RV_EOK;
 }
 
 rv_err RV32I::auipc(inst_args args)
 {
-    args.regs->pc += rv32_sext( ((uint32_t)args.inst.U.imm_31_12)<<12, 31 );
-    args.ctrl->pc_changed = true;
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.U.imm_31_12 = args.inst.U.imm_31_12;
+
+    dat.i32 = rv32_sext(imm.U.imm, 31 );
+    LOGINST("auipc, rd:%u imm: 0x%05x, sext(imm) = %08x", args.inst.U.rd, imm.U.imm_31_12, dat.u32);
+    args.regs->x[args.inst.I.rd] = args.regs->pc + dat.i32;
     return RV_EOK;
 }
 
 rv_err RV32I::sb(inst_args args)
 {
-    uint32_t addr = args.regs->x[args.inst.S.rs1] + rv32_sext(args.inst.S.imm_11_5, 6);
-    uint8_t dat = args.regs->x[args.inst.S.rs2];
-    return rv32_mem_write(addr, &dat, 1, *args.mems);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.S.imm_11_5 = args.inst.S.imm_11_5;
+    imm.S.imm_4_0  = args.inst.S.imm_4_0;
+    dat.i32 = rv32_sext(imm.S.imm, 11);
+
+    LOGINST("sb, rs1: %u, imm: 0x%08x, sext(imm) = 0x%08x, rs2: %u", args.inst.S.rs1, imm.S.imm, dat.u32, args.inst.S.rs2);
+    uint32_t addr = args.regs->x[args.inst.S.rs1] + dat.i32;
+    uint8_t  d    = args.regs->x[args.inst.S.rs2];
+    return rv32_mem_write(addr, &d, 1, *args.mems);
 }
 
 rv_err RV32I::sh(inst_args args)
 {
-    uint32_t addr = args.regs->x[args.inst.S.rs1] + rv32_sext(args.inst.S.imm_11_5, 6);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.S.imm_11_5 = args.inst.S.imm_11_5;
+    imm.S.imm_4_0  = args.inst.S.imm_4_0;
+    dat.i32 = rv32_sext(imm.S.imm, 11);
+
+    LOGINST("sh, rs1: %u, imm: 0x%08x, sext(imm) = 0x%08x, rs2: %u", args.inst.S.rs1, imm.S.imm, dat.u32, args.inst.S.rs2);
+    uint32_t addr = args.regs->x[args.inst.S.rs1] + dat.i32;
     union {
         uint8_t u8[2];
         uint16_t u16;
-    } dat;
-    dat.u16 = args.regs->x[args.inst.S.rs2];
-    return rv32_mem_write(addr, dat.u8, 2, *args.mems);
+    } d;
+    d.u16 = args.regs->x[args.inst.S.rs2];
+    return rv32_mem_write(addr, d.u8, 2, *args.mems);
 }
 
 rv_err RV32I::sw(inst_args args)
 {
-    uint32_t addr = args.regs->x[args.inst.S.rs1] + rv32_sext(args.inst.S.imm_11_5, 6);
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.S.imm_11_5 = args.inst.S.imm_11_5;
+    imm.S.imm_4_0  = args.inst.S.imm_4_0;
+    dat.i32 = rv32_sext(imm.S.imm, 11);
+    uint32_t addr = args.regs->x[args.inst.S.rs1] + dat.i32;
+    LOGINST("sw, M[ ( x(%u) + {sext(%05x) = %d} ) = 0x%08x ] = x[%u][31:0]", args.inst.S.rs1, imm.S.imm, dat.i32, addr, args.inst.S.rs2);
     union {
         uint8_t u8[4];
         uint32_t u32;
-    } dat;
-    dat.u32 = args.regs->x[args.inst.S.rs2];
-    return rv32_mem_write(addr, dat.u8, 4, *args.mems);
+    } d;
+    d.u32 = args.regs->x[args.inst.S.rs2];
+    return rv32_mem_write(addr, d.u8, 4, *args.mems);
 }
 
 rv_err RV32I::add(inst_args args)
 {
+    LOGINST("add, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] + args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::sub(inst_args args)
 {
+    LOGINST("sub, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] - args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::sll(inst_args args)
 {
+    LOGINST("sll, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] << args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::slt(inst_args args)
 {
+    LOGINST("slt, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     union ui32{
         uint32_t u32;
         int32_t i32;
@@ -460,24 +568,28 @@ rv_err RV32I::slt(inst_args args)
 
 rv_err RV32I::sltu(inst_args args)
 {
+    LOGINST("sltu, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] < args.regs->x[args.inst.R.rs2] ? 1 : 0;
     return RV_EOK;
 }
 
 rv_err RV32I::xxor(inst_args args)
 {
+    LOGINST("xor, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] ^ args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::srl(inst_args args)
 {
+    LOGINST("srl, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] >> args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::sra(inst_args args)
 {
+    LOGINST("sra, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     uint8_t rshift = args.regs->x[args.inst.R.rs2] & 0x1f;
     union {
         uint32_t u32;
@@ -491,26 +603,43 @@ rv_err RV32I::sra(inst_args args)
 
 rv_err RV32I::orr(inst_args args)
 {
+    LOGINST("or, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] | args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::andd(inst_args args)
 {
+    LOGINST("and, rd: %u, rs1: %u, rs2: %u", args.inst.R.rd, args.inst.R.rs1, args.inst.R.rs2);
     args.regs->x[args.inst.R.rd] = args.regs->x[args.inst.R.rs1] & args.regs->x[args.inst.R.rs2];
     return RV_EOK;
 }
 
 rv_err RV32I::lui(inst_args args)
 {
-	args.regs->x[args.inst.U.rd] = args.inst.U.imm_31_12<<12;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.U.imm_31_12 = args.inst.U.imm_31_12;
+    LOGINST("lui, rd: %u, imm: 0x%08x", args.inst.U.rd, imm.U.imm);
+    args.regs->x[args.inst.U.rd] = imm.U.imm;
     return RV_EOK;
 }
 
 rv_err RV32I::beq(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.B.imm_4_1  = args.inst.B.imm_4_1;
+    imm.B.imm_10_5 = args.inst.B.imm_10_5;
+    imm.B.imm_11   = args.inst.B.imm_11;
+    imm.B.imm_12   = args.inst.B.imm_12;    
+    dat.i32 = rv32_sext(imm.B.imm, 12);
+    LOGINST("beq, rs1: %u, rs2: %u, imm: 0x%04x, sext(imm) = 0x%08x, target: 0x%08x", 
+        args.inst.B.rs1, args.inst.B.rs2, imm.B.imm, dat.u32, args.regs->pc + dat.i32);
     if (args.regs->x[args.inst.B.rs1] == args.regs->x[args.inst.B.rs2]) {
-        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.regs->pc += dat.i32;
         args.ctrl->pc_changed = true;
     }
     return RV_EOK;
@@ -518,8 +647,20 @@ rv_err RV32I::beq(inst_args args)
 
 rv_err RV32I::bne(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.B.imm_4_1  = args.inst.B.imm_4_1;
+    imm.B.imm_10_5 = args.inst.B.imm_10_5;
+    imm.B.imm_11   = args.inst.B.imm_11;
+    imm.B.imm_12   = args.inst.B.imm_12;    
+    dat.i32 = rv32_sext(imm.B.imm, 12);
+    LOGINST("bne, rs1: %u, rs2: %u, imm: 0x%04x, sext(imm) = 0x%08x, target: 0x%08x", 
+        args.inst.B.rs1, args.inst.B.rs2, imm.B.imm, dat.u32, args.regs->pc + dat.i32);
     if (args.regs->x[args.inst.B.rs1] != args.regs->x[args.inst.B.rs2]) {
-        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.regs->pc +=  dat.i32;
         args.ctrl->pc_changed = true;
     }
     return RV_EOK;
@@ -527,9 +668,21 @@ rv_err RV32I::bne(inst_args args)
 
 rv_err RV32I::blt(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.B.imm_4_1  = args.inst.B.imm_4_1;
+    imm.B.imm_10_5 = args.inst.B.imm_10_5;
+    imm.B.imm_11   = args.inst.B.imm_11;
+    imm.B.imm_12   = args.inst.B.imm_12;    
+    dat.i32 = rv32_sext(imm.B.imm, 12);
+    LOGINST("blt, rs1: %u, rs2: %u, imm: 0x%04x, sext(imm) = 0x%08x, target: 0x%08x", 
+        args.inst.B.rs1, args.inst.B.rs2, imm.B.imm, dat.u32, args.regs->pc + dat.i32);
     if ( *((int32_t*)&args.regs->x[args.inst.B.rs1]) < *((int32_t*)&args.regs->x[args.inst.B.rs2]) )
     {
-        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.regs->pc += dat.i32;
         args.ctrl->pc_changed = true;
     }
     return RV_EOK;
@@ -537,9 +690,21 @@ rv_err RV32I::blt(inst_args args)
 
 rv_err RV32I::bge(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.B.imm_4_1  = args.inst.B.imm_4_1;
+    imm.B.imm_10_5 = args.inst.B.imm_10_5;
+    imm.B.imm_11   = args.inst.B.imm_11;
+    imm.B.imm_12   = args.inst.B.imm_12;    
+    dat.i32 = rv32_sext(imm.B.imm, 12);
+    LOGINST("bge, rs1: %u, rs2: %u, imm: 0x%04x, sext(imm) = 0x%08x, target: 0x%08x", 
+        args.inst.B.rs1, args.inst.B.rs2, imm.B.imm, dat.u32, args.regs->pc + dat.i32);
     if ( *((int32_t*)&args.regs->x[args.inst.B.rs1]) >= *((int32_t*)&args.regs->x[args.inst.B.rs2]) )
     {
-        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.regs->pc += dat.i32;
         args.ctrl->pc_changed = true;
     }
     return RV_EOK;
@@ -547,9 +712,21 @@ rv_err RV32I::bge(inst_args args)
 
 rv_err RV32I::bltu(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.B.imm_4_1  = args.inst.B.imm_4_1;
+    imm.B.imm_10_5 = args.inst.B.imm_10_5;
+    imm.B.imm_11   = args.inst.B.imm_11;
+    imm.B.imm_12   = args.inst.B.imm_12;    
+    dat.i32 = rv32_sext(imm.B.imm, 12);
+    LOGINST("bltu, rs1: %u, rs2: %u, imm: 0x%04x, sext(imm) = 0x%08x, target = 0x%08x", 
+        args.inst.B.rs1, args.inst.B.rs2, imm.B.imm, dat.u32, args.regs->pc + dat.i32);
     if ( args.regs->x[args.inst.B.rs1] < args.regs->x[args.inst.B.rs2] )
     {
-        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.regs->pc += dat.i32;
         args.ctrl->pc_changed = true;
     }
     return RV_EOK;
@@ -557,18 +734,60 @@ rv_err RV32I::bltu(inst_args args)
 
 rv_err RV32I::bgeu(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.B.imm_4_1  = args.inst.B.imm_4_1;
+    imm.B.imm_10_5 = args.inst.B.imm_10_5;
+    imm.B.imm_11   = args.inst.B.imm_11;
+    imm.B.imm_12   = args.inst.B.imm_12;    
+    dat.i32 = rv32_sext(imm.B.imm, 12);
+
+    LOGINST("bgeu, rs1: %u, rs2: %u, imm: 0x%04x, sext(imm) = 0x%08x = %d, target: 0x%08x", 
+        args.inst.B.rs1, args.inst.B.rs2, imm.B.imm, dat.u32, dat.i32, args.regs->pc + dat.i32);
     if ( args.regs->x[args.inst.B.rs1] >= args.regs->x[args.inst.B.rs2] )
     {
-        args.regs->pc += rv32_sext(args.inst.B.offset, 4);
+        args.regs->pc += dat.i32;
         args.ctrl->pc_changed = true;
     }
     return RV_EOK;
 }
 
+rv_err RV32I::jal(inst_args args)
+{
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.J.imm_20    = args.inst.J.imm_20;
+    imm.J.imm_19_12 = args.inst.J.imm_19_12;
+    imm.J.imm_11    = args.inst.J.imm_11;
+    imm.J.imm_10_1  = args.inst.J.imm_10_1;
+
+    dat.i32 = rv32_sext(imm.J.imm, 20);
+    LOGINST("jal, rd: %u, imm: 0x%03x, sext(imm) = 0x%08x, target: 0x%08x", 
+        args.inst.J.rd, imm.J.imm, dat.u32, args.regs->pc + dat.i32);
+    args.regs->x[args.inst.J.rd] = args.regs->pc+4;
+    args.regs->pc += dat.i32;
+    args.ctrl->pc_changed = true;
+    return RV_EOK;
+}
+
 rv_err RV32I::jalr(inst_args args)
 {
+    union {
+        uint32_t u32;
+        int32_t i32;
+    } dat;
+    rv32_imm_fmt imm = {.u32 = 0};
+    imm.I.imm = args.inst.I.imm_11_0;
+    dat.i32 = rv32_sext(args.inst.I.imm_11_0, 11);
+    LOGINST("jalr, rd: %u, rs1: %u, imm: 0x%03x, sext(imm) = 0x%08x", args.inst.I.rd, args.inst.I.rs1, imm.I.imm, dat.u32);
     uint32_t t = args.regs->pc+4;
-    args.regs->pc = args.regs->x[args.inst.I.rs1] + rv32_sext(args.inst.I.imm_11_0, 11);
+    args.regs->pc = (args.regs->x[args.inst.I.rs1] + dat.i32) & ~(1UL);
     args.regs->x[args.inst.I.rd] = t;
     args.ctrl->pc_changed = true;
     return RV_EOK;
@@ -576,12 +795,14 @@ rv_err RV32I::jalr(inst_args args)
 
 rv_err RV32I::ecall(inst_args args)
 {
+    LOGINST("ecall");
     //TODO implement
     return RV_EOK;
 }
 
 rv_err RV32I::ebreak(inst_args args)
 {
+    LOGINST("ebreak");
     //TODO implement
     return RV_EOK;
 }

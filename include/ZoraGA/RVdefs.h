@@ -10,7 +10,8 @@
 #include <vector>
 #include <thread>
 #include <functional>
-#include <condition_variable>
+#include "ZoraGA/RVLog.h"
+#include "ZoraGA/RVEvent.h"
 
 namespace ZoraGA::RVVM
 {
@@ -26,7 +27,8 @@ typedef enum rv_err
     RV_EIALIGN,     // Instruction alignment error
     RV_EDALIGN,     // Data alignment error
     RV_EUNDEF,      // Undefined instruction
-    RV_EININST,       // Invalid instruction
+    RV_EININST,     // Invalid instruction
+    RV_EACCESS,     // Access error
     RV_EFAULT,
 }rv_err;
 
@@ -136,7 +138,7 @@ rv_err mem_read(T addr, void *p, T len, TI &info) {
     rv_err err = RV_EFAULT;
     for (auto it:info) {
         if ( mem_is_range<T, TM>(addr, it) ) {
-            err = it.mem->read(addr, p, len);
+            err = it.mem->read(addr - it.addr, p, len);
             break;
         }
     }
@@ -148,7 +150,7 @@ rv_err mem_write(T addr, void *p, T len, TI &info) {
     rv_err err = RV_EFAULT;
     for (auto it:info) {
         if ( mem_is_range<T, TM>(addr, it) ) {
-            err = it.mem->write(addr, p, len);
+            err = it.mem->write(addr - it.addr, p, len);
             break;
         }
     }
@@ -263,69 +265,152 @@ typedef union rvc_inst_fmt
 typedef union rv32_inst_fmt
 {
     uint32_t inst;
-    struct{
-        union{
+    union{
+        struct{
             uint32_t opcode:7;
-            struct{
-                uint8_t aa:2;
-                uint8_t bbb:3;
-                uint8_t cc:2;
-            };
+            uint32_t :25;
         };
-        union{
-            struct {
-                uint32_t rd: 5;
-                uint32_t funct3: 3;
-                uint32_t rs1: 5;
-                uint32_t rs2: 5;
-                uint32_t funct7: 7;
-            } R;
 
+        struct{
+            uint32_t aa:2;
+            uint32_t bbb:3;
+            uint32_t cc:2;
+            uint32_t :25;
+        };
+
+        struct {
+            uint32_t :7;
+            uint32_t rd: 5;
+            uint32_t funct3: 3;
+            uint32_t rs1: 5;
+            uint32_t rs2: 5;
+            uint32_t funct7: 7;
+        } R;
+
+        union {
             struct {
+                uint32_t :7;
                 uint32_t rd: 5;
                 uint32_t funct3: 3;
                 uint32_t rs1: 5;
                 uint32_t imm_11_0: 12;
-            } I;
+            };
 
             struct {
-                uint32_t imm_4_0: 5;
-                uint32_t funct3: 3;
-                uint32_t rs1: 5;
-                uint32_t rs2: 5;
-                uint32_t imm_11_5: 7;
-            } S;
+                uint32_t :20;
+                uint32_t shamt:6;
+                uint32_t v:6;
+            };
+        } I;
 
-            struct {
-                union{
-                    struct {
-                        uint32_t imm_11: 1;
-                		uint32_t imm_4_1: 4;
-                    };
-                    uint32_t offset:5;
-                };
+        struct {
+            uint32_t :7;
+            uint32_t imm_4_0: 5;
+            uint32_t funct3: 3;
+            uint32_t rs1: 5;
+            uint32_t rs2: 5;
+            uint32_t imm_11_5: 7;
+        } S;
+
+        struct {
+                uint32_t :7;
+                uint32_t imm_11: 1;
+                uint32_t imm_4_1: 4;
                 uint32_t funct3: 3;
                 uint32_t rs1: 5;
                 uint32_t rs2: 5;
                 uint32_t imm_10_5: 6;
                 uint32_t imm_12:1;
-            } B;
+        } B;
 
-            struct {
-                uint32_t rd: 5;
-                uint32_t imm_31_12: 20;
-            } U;
+        struct {
+            uint32_t :7;
+            uint32_t rd: 5;
+            uint32_t imm_31_12: 20;
+        } U;
 
-            struct {
-                uint32_t rd: 5;
-                uint32_t imm_12_12: 8;
-                uint32_t imm_11: 1;
-                uint32_t imm_10_1: 10;
-                uint32_t imm_20: 1;
-            } J;
-        };
+        struct {
+            uint32_t :7;
+            uint32_t rd: 5;
+            uint32_t imm_19_12: 8;
+            uint32_t imm_11: 1;
+            uint32_t imm_10_1: 10;
+            uint32_t imm_20: 1;
+        } J;
     };
 }rv32_inst_fmt;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef union rv32_imm_fmt
+{
+    uint32_t u32;
+    union {
+        struct {
+            uint32_t imm_11_0:12;
+            uint32_t :20;
+        };
+        struct {
+            uint32_t imm:12;
+            uint32_t :20;
+        };
+    } I;
+
+    union {
+        struct {
+            uint32_t imm_4_0:5;
+            uint32_t imm_11_5:7;
+            uint32_t :20;
+        };
+
+        struct {
+            uint32_t imm:12;
+            uint32_t :20;
+        };
+    } S;
+
+    union {
+        struct {
+            uint32_t :1;
+            uint32_t imm_4_1:4;
+            uint32_t imm_10_5:6;
+            uint32_t imm_11:1;
+            uint32_t imm_12:1;
+            uint32_t :19;
+        };
+
+        struct {
+            uint32_t imm:13;
+            uint32_t :19;
+        };
+    } B;
+
+    union {
+        struct {
+            uint32_t :12;
+            uint32_t imm_31_12:20;
+        };
+        struct {
+            uint32_t imm;
+        };
+    } U;
+
+    union {
+        struct {
+            uint32_t :1;
+            uint32_t imm_10_1:10;
+            uint32_t imm_11:1;
+            uint32_t imm_19_12:8;
+            uint32_t imm_20:1;
+            uint32_t :11;
+        };
+
+        struct {
+            uint32_t imm:21;
+            uint32_t :11;
+        };
+    } J;
+}rv32_imm_fmt;
 #pragma pack(pop)
 
 /**
@@ -380,6 +465,14 @@ class insts
          * @return rv_err 
          */
         virtual rv_err exec(T inst, RT &regs, MT &mems, CT &ctrl) = 0;
+
+        /**
+         * @brief Set the logger
+         * 
+         * @param log 
+         * @return rv_err 
+         */
+        virtual rv_err set_log(rvlog *log) = 0;
 };
 
 typedef insts<rv32_inst_fmt, rv32_regs_base, rv32_mem_infos, rv32_ctrl> rv32_insts;
@@ -397,7 +490,7 @@ S sext(T v, uint8_t bit)
     }ret;
     ret.ui = 0;
     if (v & (1<<bit)) {
-        ret.ui |= ((~((T)0)) << bit);   
+        ret.ui |= ((~((T)0)) << bit);
     }
     ret.ui |= v;
     return ret.si;

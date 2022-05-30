@@ -1,5 +1,16 @@
 #include "ZoraGA/RV32.h"
 
+#define LOGI(fmt, ...) if (m_log) m_log->I(fmt, ##__VA_ARGS__)
+#define LOGE(fmt, ...) if (m_log) m_log->E(fmt, ##__VA_ARGS__)
+#define LOGW(fmt, ...) if (m_log) m_log->W(fmt, ##__VA_ARGS__)
+#define LOGD(fmt, ...) if (m_log) m_log->D(fmt, ##__VA_ARGS__)
+#define LOGV(fmt, ...) if (m_log) m_log->V(fmt, ##__VA_ARGS__)
+#define LOGINST(fmt, ...) if (m_log) m_log->inst(fmt, ##__VA_ARGS__)
+#define LOGREGS(fmt, ...) if (m_log) m_log->regs(fmt, ##__VA_ARGS__)
+
+#define RV32_EVT_START (1UL << 0)
+#define RV32_EVT_STOP  (1UL << 1)
+
 namespace ZoraGA::RVVM::RV32
 {
 
@@ -37,18 +48,34 @@ bool rv32::add_mem(uint32_t addr, uint32_t length, rv32_mem *mem)
                 break;
             }
 
-            if (addr > it.addr || addr < it.addr + it.len) {
+            if (addr > it.addr && addr < it.addr + it.len) {
                 err = true;
                 break;
             }
 
-            if (addr + length > it.addr || addr + length < it.addr + it.len) {
+            if (((addr + length) > it.addr) && ((addr + length) < (it.addr + it.len))) {
                 err = true;
                 break;
             }
         }
         if (err) break;
         m_mems.push_back(rv32_mem_info{addr, length, mem});
+        ret = true;
+    }while(0);
+    return ret;
+}
+
+bool rv32::set_log(rvlog *log)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    bool ret = false;
+    do{
+        if (m_started || m_log) break;
+        if (log == nullptr) break;
+        m_log = log;
+        for (auto it:m_insts) {
+            it.second->set_log(m_log);
+        }
         ret = true;
     }while(0);
     return ret;
@@ -119,6 +146,16 @@ bool rv32::stop()
     return ret;
 }
 
+bool rv32::wait_for_start(uint32_t toms)
+{
+    return m_event.wait(RV32_EVT_START, toms);
+}
+
+bool rv32::wait_for_stop(uint32_t toms)
+{
+    return m_event.wait(RV32_EVT_STOP, toms);
+}
+
 void rv32::run()
 {
     uint32_t pc_prv = 0;
@@ -126,30 +163,39 @@ void rv32::run()
     bool is_compress = false;
 
     m_running = true;
+    m_event.set(RV32_EVT_START);
     while(1) {
         if (m_exit_req) break;
 
         if (!inst_fetch(m_regs.pc, inst, is_compress))
         {
-            printf("inst fetch error\n");
+            LOGE("inst fetch err");
             break;
         }
         pc_prv = m_regs.pc;
+        LOGD("PC %08x, fetch instruction: %08x, opcode: %02x, aa: %01x, bbb: %01x, cc: %01x", pc_prv, inst.inst, inst.opcode, inst.aa, inst.bbb, inst.cc);
+
+        if (inst.inst == 0) {
+            LOGE("illegal instruction");
+            break;
+        }
 
         m_ctrl.pc_changed = false;
         if (!inst_exec(inst))
         {
-            printf("inst exec error\n");
+            LOGE("inst exec err");
             break;
         }
+        regs_dump();
 
         if (m_regs.pc != pc_prv || m_ctrl.pc_changed) {
-            printf("pc changed\n");
+            LOGD("pc changed");
         } else {
             m_regs.pc += is_compress ? 2 : 4;
         }
     }
     m_running = false;
+    m_event.set(RV32_EVT_STOP);
 }
 
 bool rv32::inst_fetch(uint32_t addr, rv32_inst_fmt &out, bool &is_compress)
@@ -179,9 +225,9 @@ bool rv32::inst_fetch(uint32_t addr, rv32_inst_fmt &out, bool &is_compress)
         if (m_comprs) {
 
             /* read fist 16bit for check compress */
-            err = info.mem->read(addr, inst.u8, 2);
+            err = info.mem->read(addr - info.addr, inst.u8, 2);
             if (err != RV_EOK) {
-                printf("instruction fetch err: %d\n", err);
+                LOGE("instruction fetch err: %d", err);
                 break;
             }
 
@@ -193,18 +239,18 @@ bool rv32::inst_fetch(uint32_t addr, rv32_inst_fmt &out, bool &is_compress)
             }
 
             /* read last 16bit if not compress */
-            err = info.mem->read(addr, inst.u8+2, 2);
+            err = info.mem->read(addr - info.addr, inst.u8+2, 2);
             if (err != RV_EOK) {
-                printf("instruction fetch err: %d\n", err);
+                LOGE("instruction fetch err: %d", err);
                 break;
             }
             is_compress = false;
             out.inst    = inst.u32;
             ret         = true;
         } else {
-            err = info.mem->read(addr, inst.u8, 4);
+            err = info.mem->read(addr - info.addr, inst.u8, 4);
             if (err != RV_EOK) {
-                printf("instruction fetch err: %d\n", err);
+                LOGE("instruction fetch err: %d", err);
                 break;
             }
             ret = true;
@@ -220,13 +266,28 @@ bool rv32::inst_exec(rv32_inst_fmt inst)
     bool ret = false;
     do{
         for (auto it:m_insts) {
-            if (!it.second->isValid(inst)) continue;
+            err = it.second->isValid(inst);
+            if (err != RV_EOK) continue;
             err = it.second->exec(inst, m_regs, m_mems, m_ctrl);
             ret = (err == RV_EOK);
             break;
         }
     }while(0);
     return ret;
+}
+
+void rv32::regs_dump()
+{
+    LOGREGS("    %-8d %-8d %-8d %-8d", 0, 1, 2, 3);
+    LOGREGS(" 0: %08x %08x %08x %08x", m_regs.x[0], m_regs.x[1], m_regs.x[2], m_regs.x[3]);
+    LOGREGS(" 1: %08x %08x %08x %08x", m_regs.x[4], m_regs.x[5], m_regs.x[6], m_regs.x[7]);
+    LOGREGS(" 2: %08x %08x %08x %08x", m_regs.x[8], m_regs.x[9], m_regs.x[10], m_regs.x[11]);
+    LOGREGS(" 3: %08x %08x %08x %08x", m_regs.x[12], m_regs.x[13], m_regs.x[14], m_regs.x[15]);
+    LOGREGS(" 4: %08x %08x %08x %08x", m_regs.x[16], m_regs.x[17], m_regs.x[18], m_regs.x[19]);
+    LOGREGS(" 5: %08x %08x %08x %08x", m_regs.x[20], m_regs.x[21], m_regs.x[22], m_regs.x[23]);
+    LOGREGS(" 6: %08x %08x %08x %08x", m_regs.x[24], m_regs.x[25], m_regs.x[26], m_regs.x[27]);
+    LOGREGS(" 7: %08x %08x %08x %08x", m_regs.x[28], m_regs.x[29], m_regs.x[30], m_regs.x[31]);
+    LOGREGS("PC: %08x", m_regs.pc);
 }
 
 }
