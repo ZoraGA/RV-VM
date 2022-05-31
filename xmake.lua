@@ -9,5 +9,7 @@ target("rvvm")
     set_languages("c++17")
     add_files("src/*.cc")
     add_includedirs("include", {public=true})
+    add_syslinks("pthread")
 
 includes("rv32_loader")
+includes("test")

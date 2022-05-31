@@ -101,8 +101,9 @@ class rv32
         void regs_dump();
 
     private:
-    	rv32_ctrl      m_ctrl;
-        rv32_regs_base m_regs;
+    	// rv32_ctrl      m_ctrl;
+        // rv32_regs_base m_regs;
+        rv32_regs      m_regs;
         rv32_insts_map m_insts;
         rv32_mem_infos m_mems;
         rv32_event     m_event;

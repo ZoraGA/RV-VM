@@ -1,0 +1,13 @@
+set_symbols("debug")
+set_strip("none")
+set_optimize("none")
+
+add_requires("gtest")
+target("test_insts")
+    set_default(false)
+    set_kind("binary")
+    set_targetdir("dist")
+    add_packages("gtest")
+    add_files("src/*.cc")
+    add_includedirs("include")
+    add_deps("rvvm")

@@ -1,4 +1,5 @@
 #include "ZoraGA/RV32.h"
+#include <algorithm>
 
 #define LOGI(fmt, ...) if (m_log) m_log->I(fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) if (m_log) m_log->E(fmt, ##__VA_ARGS__)
@@ -15,11 +16,17 @@ namespace ZoraGA::RVVM::RV32
 {
 
 rv32::rv32()
-{}
+{
+    m_regs.reg = new rv32_regs_base;
+    m_regs.ctl = new rv32_regs_ctrl;
+}
 
 rv32::~rv32()
 {
     stop();
+    if (m_regs.reg) delete m_regs.reg;
+    if (m_regs.fp) delete m_regs.fp;
+    if (m_regs.ctl) delete m_regs.ctl;
 }
 
 bool rv32::add_inst(std::string name, rv32_insts *inst)
@@ -28,8 +35,10 @@ bool rv32::add_inst(std::string name, rv32_insts *inst)
     bool ret = false;
     do{
         if (m_started) break;
+        std::transform(name.begin(), name.end(), name.begin(), ::toupper);
         if (m_insts.find(name) != m_insts.end()) break;
         m_insts[name] = inst;
+        if ( (name == "F" || name == "D") && m_regs.fp == nullptr ) m_regs.fp = new rv32_regs_fp;
         ret = true;
     }while(0);
     return ret;
@@ -87,7 +96,7 @@ bool rv32::set_start_addr(uint32_t addr)
     bool ret = false;
     do{
         if (m_started) break;
-        m_regs.pc = addr;
+        m_regs.reg->pc = addr;
         ret = true;
     }while(0);
     return ret;
@@ -167,12 +176,12 @@ void rv32::run()
     while(1) {
         if (m_exit_req) break;
 
-        if (!inst_fetch(m_regs.pc, inst, is_compress))
+        if (!inst_fetch(m_regs.reg->pc, inst, is_compress))
         {
             LOGE("inst fetch err");
             break;
         }
-        pc_prv = m_regs.pc;
+        pc_prv = m_regs.reg->pc;
         LOGD("PC %08x, fetch instruction: %08x, opcode: %02x, aa: %01x, bbb: %01x, cc: %01x", pc_prv, inst.inst, inst.opcode, inst.aa, inst.bbb, inst.cc);
 
         if (inst.inst == 0) {
@@ -180,7 +189,8 @@ void rv32::run()
             break;
         }
 
-        m_ctrl.pc_changed = false;
+        m_regs.ctl->pc_changed = false;
+        m_regs.reg->x[0] = 0;
         if (!inst_exec(inst))
         {
             LOGE("inst exec err");
@@ -188,10 +198,10 @@ void rv32::run()
         }
         regs_dump();
 
-        if (m_regs.pc != pc_prv || m_ctrl.pc_changed) {
+        if (m_regs.reg->pc != pc_prv || m_regs.ctl->pc_changed) {
             LOGD("pc changed");
         } else {
-            m_regs.pc += is_compress ? 2 : 4;
+            m_regs.reg->pc += is_compress ? 2 : 4;
         }
     }
     m_running = false;
@@ -268,7 +278,7 @@ bool rv32::inst_exec(rv32_inst_fmt inst)
         for (auto it:m_insts) {
             err = it.second->isValid(inst);
             if (err != RV_EOK) continue;
-            err = it.second->exec(inst, m_regs, m_mems, m_ctrl);
+            err = it.second->exec(inst, m_regs, m_mems);
             ret = (err == RV_EOK);
             break;
         }
@@ -279,15 +289,15 @@ bool rv32::inst_exec(rv32_inst_fmt inst)
 void rv32::regs_dump()
 {
     LOGREGS("    %-8d %-8d %-8d %-8d", 0, 1, 2, 3);
-    LOGREGS(" 0: %08x %08x %08x %08x", m_regs.x[0], m_regs.x[1], m_regs.x[2], m_regs.x[3]);
-    LOGREGS(" 1: %08x %08x %08x %08x", m_regs.x[4], m_regs.x[5], m_regs.x[6], m_regs.x[7]);
-    LOGREGS(" 2: %08x %08x %08x %08x", m_regs.x[8], m_regs.x[9], m_regs.x[10], m_regs.x[11]);
-    LOGREGS(" 3: %08x %08x %08x %08x", m_regs.x[12], m_regs.x[13], m_regs.x[14], m_regs.x[15]);
-    LOGREGS(" 4: %08x %08x %08x %08x", m_regs.x[16], m_regs.x[17], m_regs.x[18], m_regs.x[19]);
-    LOGREGS(" 5: %08x %08x %08x %08x", m_regs.x[20], m_regs.x[21], m_regs.x[22], m_regs.x[23]);
-    LOGREGS(" 6: %08x %08x %08x %08x", m_regs.x[24], m_regs.x[25], m_regs.x[26], m_regs.x[27]);
-    LOGREGS(" 7: %08x %08x %08x %08x", m_regs.x[28], m_regs.x[29], m_regs.x[30], m_regs.x[31]);
-    LOGREGS("PC: %08x", m_regs.pc);
+    LOGREGS(" 0: %08x %08x %08x %08x", m_regs.reg->x[0], m_regs.reg->x[1], m_regs.reg->x[2], m_regs.reg->x[3]);
+    LOGREGS(" 1: %08x %08x %08x %08x", m_regs.reg->x[4], m_regs.reg->x[5], m_regs.reg->x[6], m_regs.reg->x[7]);
+    LOGREGS(" 2: %08x %08x %08x %08x", m_regs.reg->x[8], m_regs.reg->x[9], m_regs.reg->x[10], m_regs.reg->x[11]);
+    LOGREGS(" 3: %08x %08x %08x %08x", m_regs.reg->x[12], m_regs.reg->x[13], m_regs.reg->x[14], m_regs.reg->x[15]);
+    LOGREGS(" 4: %08x %08x %08x %08x", m_regs.reg->x[16], m_regs.reg->x[17], m_regs.reg->x[18], m_regs.reg->x[19]);
+    LOGREGS(" 5: %08x %08x %08x %08x", m_regs.reg->x[20], m_regs.reg->x[21], m_regs.reg->x[22], m_regs.reg->x[23]);
+    LOGREGS(" 6: %08x %08x %08x %08x", m_regs.reg->x[24], m_regs.reg->x[25], m_regs.reg->x[26], m_regs.reg->x[27]);
+    LOGREGS(" 7: %08x %08x %08x %08x", m_regs.reg->x[28], m_regs.reg->x[29], m_regs.reg->x[30], m_regs.reg->x[31]);
+    LOGREGS("PC: %08x", m_regs.reg->pc);
 }
 
 }

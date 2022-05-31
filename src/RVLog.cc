@@ -173,7 +173,7 @@ std::string rvlog::time_str(std::string fmt)
     std::string str;
 
     t = time(nullptr);
-    #ifdef _MSC_VER
+    #if defined(_MSC_VER) || defined(__MINGW64__)
     localtime_s(&tm, &t);
     #else
     localtime_r(&t, &tm);
