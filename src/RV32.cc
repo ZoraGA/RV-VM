@@ -29,16 +29,23 @@ rv32::~rv32()
     if (m_regs.ctl) delete m_regs.ctl;
 }
 
-bool rv32::add_inst(std::string name, rv32_insts *inst)
+bool rv32::add_inst(std::string name, rv32_inst *inst)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     bool ret = false;
     do{
-        if (m_started) break;
+        if (m_started || inst == nullptr) break;
         std::transform(name.begin(), name.end(), name.begin(), ::toupper);
         if (m_insts.find(name) != m_insts.end()) break;
         m_insts[name] = inst;
         if ( (name == "F" || name == "D") && m_regs.fp == nullptr ) m_regs.fp = new rv32_regs_fp;
+
+        std::vector<std::string> isas;
+        for (auto it:m_insts) {
+            isas.push_back(it.first);
+        }
+
+        inst->regist(m_regs, isas);
         ret = true;
     }while(0);
     return ret;

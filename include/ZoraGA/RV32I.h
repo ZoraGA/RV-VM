@@ -6,12 +6,13 @@
 namespace ZoraGA::RVVM::RV32
 {
 
-class RV32I:public rv32_insts
+class RV32I:public rv32_inst
 {
     public:
         rv_err isValid(rv32_inst_fmt inst);
         rv_err exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_infos);
         rv_err set_log(rvlog *log);
+        rv_err regist(rv32_regs &regs, std::vector<std::string> &isas);
 
     private:
         typedef struct inst_arg
@@ -27,6 +28,7 @@ class RV32I:public rv32_insts
         rv_err lbu(inst_args args);
         rv_err lhu(inst_args args);
         rv_err fence(inst_args args);
+        rv_err fencei(inst_args args);
         rv_err addi(inst_args args);
         rv_err slti(inst_args args);
         rv_err sltiu(inst_args args);

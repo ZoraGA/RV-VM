@@ -13,6 +13,7 @@ namespace ZoraGA::RVVM::RV32
 
 rv_err RV32I::isValid(rv32_inst_fmt inst)
 {
+    /* only opcode check */
     return ( op_aa_match(inst) && op_bbb_match(inst) && op_cc_match(inst) ) ? RV_EOK : RV_EUNDEF;
 }
 
@@ -52,8 +53,9 @@ rv_err RV32I::exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_inf
                 case 0b011:
                     if (inst.I.funct3 == 0b000) {
                         err = fence(a);
-                    } else {
+                    } else if (inst.I.funct3 == 0b001) {
                         // err = RV_EUNDEF;
+                        err = fencei(a);
                     }
                     break;
 
@@ -98,7 +100,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_inf
                 default:
                     break;
             }
-            if (!ok) break;
+            // if (!ok) break;
         }
         else if (inst.cc == 0b01) {
             switch(inst.bbb) {
@@ -111,7 +113,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_inf
                     } else if (inst.S.funct3 == 0b010) {
                         err = sw(a);
                     } else {
-                        err = RV_EUNDEF;
+                        // err = RV_EUNDEF;
                     }
                     break;
 
@@ -168,7 +170,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_inf
                 default:
                     break;
             }
-            if (!ok) break;
+            // if (!ok) break;
         }
         else if (inst.cc == 0b11) {
             switch(inst.bbb) {
@@ -224,7 +226,7 @@ rv_err RV32I::exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_inf
                 default:
                     break;
             }
-            if (!ok) break;
+            // if (!ok) break;
         }
     }while(0);
     return err;
@@ -233,6 +235,11 @@ rv_err RV32I::exec(rv32_inst_fmt inst,  rv32_regs &regs, rv32_mem_infos &mem_inf
 rv_err RV32I::set_log(rvlog *log)
 {
     m_log = log;
+    return RV_EOK;
+}
+
+rv_err RV32I::regist(rv32_regs &regs, std::vector<std::string> &isas)
+{
     return RV_EOK;
 }
 
@@ -392,6 +399,12 @@ rv_err RV32I::lhu(inst_args a)
 rv_err RV32I::fence(inst_args a)
 {
     LOGINST("fence");
+    return RV_EOK;
+}
+
+rv_err RV32I::fencei(inst_args a)
+{
+    LOGINST("fencei");
     return RV_EOK;
 }
 

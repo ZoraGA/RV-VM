@@ -19,7 +19,7 @@ class rv32
          * @return true If the instruction is added successfully
          * @return false If the instruction is already added
          */
-        bool add_inst(std::string name, rv32_insts *inst);
+        bool add_inst(std::string name, rv32_inst *inst);
 
         /**
          * @brief Add memory to the memory set

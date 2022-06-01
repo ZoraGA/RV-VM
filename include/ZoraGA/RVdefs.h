@@ -6,6 +6,7 @@
 #include <string.h>
 #include <map>
 #include <mutex>
+#include <bitset>
 #include <string>
 #include <vector>
 #include <thread>
@@ -15,6 +16,8 @@
 #include "ZoraGA/defs/RV32InstFmt.h"
 #include "ZoraGA/defs/RV64InstFmt.h"
 #include "ZoraGA/defs/RVCInstFmt.h"
+#include "ZoraGA/defs/RVCSRFmt.h"
+#include "ZoraGA/defs/RVCSRAddr.h"
 
 namespace ZoraGA::RVVM
 {
@@ -55,26 +58,24 @@ struct regs
 typedef struct regs<uint32_t, 32> rv32_regs_base;
 typedef struct regs<uint64_t, 32> rv64_regs_base;
 
-template<typename T, size_t N>
+template<typename T, size_t W>
 struct rv_regs_ctrl
 {
     rv_regs_ctrl() {
-        memset(csrs, 0, sizeof(csrs));
         pc_changed = false;
     }
-    T csrs[N];
     bool pc_changed;
+    std::map<rv_csr_addr_fmt, std::bitset<W>> csrs;
 };
 
 typedef struct rv_regs_ctrl<uint32_t, 32> rv32_regs_ctrl;
-typedef struct rv_regs_ctrl<uint64_t, 32> rv64_regs_ctrl;
+typedef struct rv_regs_ctrl<uint64_t, 64> rv64_regs_ctrl;
 
 typedef struct rv_regs_fp
 {
     rv_regs_fp() {
         for (size_t i=0; i<32; i++)
             u[i] = 0;
-        fcsr.u32 = 0;
     }
     union {
         uint64_t u[32];
@@ -87,19 +88,6 @@ typedef struct rv_regs_fp
             double fp[32];
         } d;
     };
-    
-    union {
-        uint32_t u32;
-        struct {
-            uint32_t nx:1;
-            uint32_t uf:1;
-            uint32_t of:1;
-            uint32_t dz:1;
-            uint32_t nv:1;
-            uint32_t frm:3;
-            uint32_t :24;
-        };
-    } fcsr;
 }rv_regs_fp;
 
 typedef rv_regs_fp rv32_regs_fp;
@@ -240,7 +228,7 @@ typedef comprs<uint32_t, uint64_t> rv64_comprs;
  * @tparam MT Memory vector reference, rv32_mem_infos or rv64_mem_infos
  */
 template<typename T, typename RT, typename MT>
-class insts
+class instruction
 {
     public:
         /**
@@ -268,13 +256,15 @@ class insts
          * @return rv_err 
          */
         virtual rv_err set_log(rvlog *log) = 0;
+
+        virtual rv_err regist(RT &regs, std::vector<std::string> &isas);
 };
 
-typedef insts<rv32_inst_fmt, rv32_regs, rv32_mem_infos> rv32_insts;
-typedef insts<rv64_inst_fmt, rv32_regs, rv64_mem_infos> rv64_insts;
+typedef instruction<rv32_inst_fmt, rv32_regs, rv32_mem_infos> rv32_inst;
+typedef instruction<rv64_inst_fmt, rv32_regs, rv64_mem_infos> rv64_inst;
 
-typedef std::map<std::string, rv32_insts*> rv32_insts_map;
-typedef std::map<std::string, rv64_insts*> rv64_insts_map;
+typedef std::map<std::string, rv32_inst*> rv32_insts_map;
+typedef std::map<std::string, rv64_inst*> rv64_insts_map;
 
 template<typename T, typename S>
 S sext(T v, uint8_t bit)

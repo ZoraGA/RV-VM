@@ -52,6 +52,12 @@ typedef union rv32_inst_fmt
                 uint32_t shamt:6;
                 uint32_t v:6;
             };
+
+            struct{
+                uint32_t :15;
+                uint32_t zimm_4_0:5;
+                uint32_t :12;
+            };
         } I;
 
         struct {
