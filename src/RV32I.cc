@@ -1,4 +1,6 @@
 #include "ZoraGA/RV32I.h"
+#include "ZoraGA/defs/RVCSRFmt.h"
+#include "ZoraGA/defs/RVCSRAddr.h"
 
 #define LOGI(fmt, ...) if (m_log) m_log->I(fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) if (m_log) m_log->E(fmt, ##__VA_ARGS__)
@@ -240,6 +242,9 @@ rv_err RV32I::set_log(rvlog *log)
 
 rv_err RV32I::regist(rv32_regs &regs, std::vector<std::string> &isas)
 {
+    if (regs.ctl->csrs.find(rv_csr_addr(CSR_misa)) != regs.ctl->csrs.end()) {
+        regs.ctl->csrs[rv_csr_addr(CSR_misa)].set(8);
+    }
     return RV_EOK;
 }
 

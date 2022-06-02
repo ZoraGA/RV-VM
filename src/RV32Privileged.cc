@@ -77,7 +77,7 @@ rv_err RV32Privileged::regist(rv32_regs &regs, std::vector<std::string> &isas)
     regs.ctl->csrs[rv_csr_addr(CSR_mhartid)]    = 0;
     regs.ctl->csrs[rv_csr_addr(CSR_mconfigptr)] = 0;
     regs.ctl->csrs[rv_csr_addr(CSR_mstatus)]    = 0;
-    regs.ctl->csrs[rv_csr_addr(CSR_misa)]       = 0;
+    regs.ctl->csrs[rv_csr_addr(CSR_misa)]       = 0x40000000;
     regs.ctl->csrs[rv_csr_addr(CSR_medeleg)]    = 0;
     regs.ctl->csrs[rv_csr_addr(CSR_mideleg)]    = 0;
     regs.ctl->csrs[rv_csr_addr(CSR_mie)]        = 0;

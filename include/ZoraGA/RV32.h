@@ -2,6 +2,8 @@
 #define __ZORAGA_RVVM_RV32_H__
 
 #include "ZoraGA/RVdefs.h"
+#include "ZoraGA/defs/RVCSRFmt.h"
+#include "ZoraGA/defs/RVCSRAddr.h"
 
 namespace ZoraGA::RVVM::RV32
 {
